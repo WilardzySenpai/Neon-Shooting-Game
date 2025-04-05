@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Warriors: Duel</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Orbitron:wght@400;700&display=swap"
+        rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%);
+            font-family: 'Orbitron', sans-serif;
+            color: #fff;
+            overflow: hidden;
+        }
+
+        #gameContainer {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        canvas {
+            border: 3px solid #00ff9d;
+            border-radius: 10px;
+            box-shadow: 0 0 30px rgba(0, 255, 157, 0.3);
+            background: linear-gradient(160deg, #001a1a 0%, #000a0a 100%);
+        }
+
+        .game-screen {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 2rem 3rem;
+            border-radius: 15px;
+            border: 2px solid #00ff9d;
+            box-shadow: 0 0 20px rgba(0, 255, 157, 0.2);
+            backdrop-filter: blur(5px);
+        }
+
+        form div {
+            margin-bottom: 1rem;
+        }
+
+        label {
+            display: block;
+            font-size: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 0.5rem;
+            font-size: 1rem;
+            border: 2px solid #00ff9d;
+            border-radius: 5px;
+            background: #000;
+            color: #fff;
+            box-shadow: 0 0 10px rgba(0, 255, 157, 0.2);
+        }
+
+
+        .title {
+            font-family: 'Press Start 2P', cursive;
+            font-size: 2.5rem;
+            color: #00ff9d;
+            text-shadow: 0 0 10px #00ff9d;
+            margin-bottom: 1.5rem;
+        }
+
+        .button {
+            background: linear-gradient(45deg, #00ff9d, #00b3ff);
+            color: #000;
+            padding: 1rem 2rem;
+            border: none;
+            border-radius: 5px;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin: 1rem;
+        }
+
+        .button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 15px rgba(0, 255, 157, 0.5);
+        }
+
+        .stats {
+            position: absolute;
+            top: 20px;
+            width: 100%;
+            display: flex;
+            justify-content: space-around;
+            font-size: 1.2rem;
+            color: #00ff9d;
+            text-shadow: 0 0 5px rgba(0, 255, 157, 0.5);
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+            font-size: 0.9rem;
+            color: #888;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="gameContainer">
+        <div class="stats">
+            <div id="player1Stats">RED: <span id="p1Health">100</span>%</div>
+            <div id="timer">02:00</div>
+            <div id="player2Stats">BLUE: <span id="p2Health">100</span>%</div>
+        </div>
+        <canvas id="gameCanvas"></canvas>
+        <div id="startScreen" class="game-screen">
+            <!-- <form id="playerNamesForm" onsubmit="startGame(event)">
+                <div>
+                    <label for="player1Name">Player 1 Name:</label>
+                    <input type="text" id="player1Name" name="player1Name" required>
+                </div>
+                <div>
+                    <label for="player2Name">Player 2 Name:</label>
+                    <input type="text" id="player2Name" name="player2Name" required>
+                </div>
+                <button type="submit" class="button">START DUEL</button>
+            </form> -->
+            <h1 class="title">NEON WARRIORS</h1>
+            <button class="button" onclick="startGame()">START DUEL</button>
+            <p>Use WASD and SPACE (Red) vs ARROWS and ENTER (Blue)</p>
+        </div>
+        <div id="gameOverScreen" class="game-screen" style="display: none;">
+            <h1 class="title" id="winnerText"></h1>
+            <div id="finalStats"></div>
+            <button class="button" onclick="startGame()">REMATCH</button>
+        </div>
+        <div id="controls">
+            Move: WASD / Arrows | Jump: W / Up | Shoot: Space / Enter
+        </div>
+    </div>
+    <audio id="shootSound" src="assets/audio/shoot.mp3"></audio>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 1000;
+        canvas.height = 500;
+
+        // Game Configuration
+        const config = {
+            gravity: 0.3,
+            moveSpeed: 3.5,
+            jumpPower: -10,
+            shotCooldown: 500,
+            maxHealth: 100,
+            damagePerHit: 34,
+            gameDuration: 120 // seconds
+        };
+
+        // Game State
+        let gameTime = config.gameDuration;
+        let gameActive = false;
+        let timerInterval;
+
+        const players = [
+            {
+                id: 1,
+                x: 200,
+                y: 300,
+                width: 40,
+                height: 60,
+                vy: 0,
+                color: '#ff3b3b',
+                health: config.maxHealth,
+                keys: { left: 'a', right: 'd', jump: 'w', shoot: ' ' },
+                facing: 1,
+                onGround: false,
+                lastShot: 0,
+                score: 0
+            },
+            {
+                id: 2,
+                x: 800,
+                y: 300,
+                width: 40,
+                height: 60,
+                vy: 0,
+                color: '#3b89ff',
+                health: config.maxHealth,
+                keys: { left: 'ArrowLeft', right: 'ArrowRight', jump: 'ArrowUp', shoot: 'Enter' },
+                facing: -1,
+                onGround: false,
+                lastShot: 0,
+                score: 0
+            }
+        ];
+
+        const platforms = [
+            { x: 0, y: 400, width: 1000, height: 100 },
+            { x: 300, y: 300, width: 200, height: 20 },
+            { x: 600, y: 250, width: 150, height: 20 }
+        ];
+
+        const bullets = [];
+        const keysPressed = {};
+
+        // Event Listeners
+        window.addEventListener('keydown', e => keysPressed[e.key] = true);
+        window.addEventListener('keyup', e => delete keysPressed[e.key]);
+
+        // Player Drawing Function
+        function drawPlayer(player) {
+            // Body
+            ctx.fillStyle = player.color;
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+
+            // Head
+            ctx.beginPath();
+            ctx.arc(player.x + player.width / 2, player.y - 10, 15, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffeebb';
+            ctx.fill();
+
+            // Eyes
+            ctx.beginPath();
+            ctx.arc(player.x + player.width / 2 + (7 * player.facing), player.y - 10, 3, 0, Math.PI * 2);
+            ctx.fillStyle = '#000';
+            ctx.fill();
+
+            // Health Bar
+            ctx.fillStyle = '#444';
+            ctx.fillRect(player.x - 10, player.y - 30, player.width + 20, 5);
+            ctx.fillStyle = player.health > 50 ? '#00ff9d' : player.health > 25 ? '#ffd700' : '#ff0000';
+            ctx.fillRect(player.x - 10, player.y - 30, (player.width + 20) * (player.health / 100), 5);
+        }
+
+        function updatePlayer(player) {
+            // Horizontal Movement
+            if (keysPressed[player.keys.left]) {
+                player.x -= config.moveSpeed;
+                player.facing = -1;
+            }
+            if (keysPressed[player.keys.right]) {
+                player.x += config.moveSpeed;
+                player.facing = 1;
+            }
+
+            // Jumping
+            if (keysPressed[player.keys.jump] && player.onGround) {
+                player.vy = config.jumpPower;
+                player.onGround = false;
+            }
+
+            // Apply Gravity
+            player.vy += config.gravity;
+            player.y += player.vy;
+
+            // Platform Collision
+            player.onGround = false;
+            platforms.forEach(platform => {
+                if (checkCollision(player, platform)) {
+                    if (player.vy > 0) {
+                        player.y = platform.y - player.height;
+                        player.vy = 0;
+                        player.onGround = true;
+                    }
+                }
+            });
+
+            if (keysPressed[player.keys.shoot] && Date.now() - player.lastShot > config.shotCooldown) {
+                bullets.push({
+                    x: player.x + (player.facing === 1 ? player.width : -10),
+                    y: player.y + player.height / 2,
+                    dx: 8 * player.facing,
+                    color: player.color,
+                    owner: player.id
+                });
+                player.lastShot = Date.now();
+                playShootSound();
+            }
+
+
+            // Boundary Check
+            player.x = Math.max(0, Math.min(canvas.width - player.width, player.x));
+        }
+
+        function checkCollision(rect1, rect2) {
+            return rect1.x < rect2.x + rect2.width &&
+                rect1.x + rect1.width > rect2.x &&
+                rect1.y < rect2.y + rect2.height &&
+                rect1.y + rect1.height > rect2.y;
+        }
+
+        function updateBullets() {
+            bullets.forEach((bullet, index) => {
+                bullet.x += bullet.dx;
+
+                // Check hit players
+                players.forEach(player => {
+                    if (player.id !== bullet.owner &&
+                        bullet.x > player.x &&
+                        bullet.x < player.x + player.width &&
+                        bullet.y > player.y &&
+                        bullet.y < player.y + player.height) {
+                        player.health = Math.max(0, player.health - config.damagePerHit);
+                        bullets.splice(index, 1);
+                        checkGameOver();
+                    }
+                });
+
+                // Remove off-screen bullets
+                if (bullet.x < 0 || bullet.x > canvas.width) {
+                    bullets.splice(index, 1);
+                }
+            });
+        }
+
+        function checkGameOver() {
+            players.forEach(player => {
+                if (player.health <= 0) {
+                    gameActive = false;
+                    showGameOver(player.id === 1 ? 'Blue Warrior' : 'Red Warrior');
+                }
+            });
+        }
+
+        function showGameOver(winner) {
+            clearInterval(timerInterval);
+            document.getElementById('gameOverScreen').style.display = 'block';
+            document.getElementById('winnerText').textContent = `${winner} WINS!`;
+            document.getElementById('finalStats').innerHTML = `
+                <p>Red Warrior: ${players[0].health}%</p>
+                <p>Blue Warrior: ${players[1].health}%</p>
+            `;
+        }
+
+        function playShootSound() {
+            const shootSound = document.getElementById('shootSound');
+            shootSound.currentTime = 0;
+            shootSound.play().catch(error => {
+                console.error('Error playing shoot sound:', error);
+            });
+        }
+
+
+        function updateTimer() {
+            const minutes = Math.floor(gameTime / 60);
+            const seconds = gameTime % 60;
+            document.getElementById('timer').textContent =
+                `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+            if (gameTime <= 0) {
+                gameActive = false;
+                showGameOver('Time Over!');
+            }
+            gameTime--;
+        }
+
+        function gameLoop() {
+            if (!gameActive) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw platforms
+            ctx.fillStyle = '#444';
+            platforms.forEach(platform => {
+                ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+            });
+
+            // Update and draw players
+            players.forEach(player => {
+                updatePlayer(player);
+                drawPlayer(player);
+            });
+
+            // Update and draw bullets
+            updateBullets();
+            ctx.fillStyle = '#fff';
+            bullets.forEach(bullet => {
+                ctx.beginPath();
+                ctx.arc(bullet.x, bullet.y, 3, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Update UI
+            document.getElementById('p1Health').textContent = players[0].health;
+            document.getElementById('p2Health').textContent = players[1].health;
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function startGame() {
+            gameActive = true;
+            gameTime = config.gameDuration;
+            players.forEach(player => {
+                player.health = config.maxHealth;
+                player.x = player.id === 1 ? 200 : 800;
+                player.y = 300;
+            });
+            bullets.length = 0;
+            document.getElementById('startScreen').style.display = 'none';
+            document.getElementById('gameOverScreen').style.display = 'none';
+            timerInterval = setInterval(updateTimer, 1000);
+            gameLoop();
+        }
+    </script>
+</body>
+
+</html>
